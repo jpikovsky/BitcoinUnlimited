@@ -7159,6 +7159,11 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         }
     }
 
+    else if (strCommand == NetMsgType::CBobtail)
+    {
+        // Handle receiving Bobtail data from the network
+    }
+
     else
     {
         // Ignore unknown commands for extensibility
