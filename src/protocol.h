@@ -381,6 +381,35 @@ public:
     uint256 hash;
 };
 
+/** bobtail message data */
+class CBobtail
+{
+public:
+    CBobtail();
+    CBobtail(int32_t nVersion, uint256 hashPrevBlock, uint256 hashMerkleRoot, uint32_t nTime, uint32-T nBits, uint32_t nNonce);
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion)
+    {
+        READWRITE(type);
+        READWRITE(hash);
+    }
+
+    friend bool operator<(const CInv& a, const CInv& b);
+
+    /// returns true if this inv is one of any of the inv types ever used.
+    bool IsKnownType() const;
+    const char* GetCommand() const;
+    std::string ToString() const;
+
+    // TODO: make private (improves encapsulation)
+public:
+    int type;
+    uint256 hash;
+};
+
 enum {
     MSG_TX = 1,
     MSG_BLOCK,
