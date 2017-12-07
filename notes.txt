@@ -1,6 +1,6 @@
 Command: grep -rnw 'src/' -e "text"
 
-ProcessMessage() in 
+ProcessMessage() in in src/main.cpp
 
 CheckBlockHeader() in src/thinblock.cpp and src/main.cpp
 

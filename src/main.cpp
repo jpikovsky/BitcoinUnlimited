@@ -35,6 +35,7 @@
 #include "script/sigcache.h"
 #include "script/standard.h"
 #include "thinblock.h"
+#include "bobtail.h"
 #include "tinyformat.h"
 #include "txdb.h"
 #include "txmempool.h"
@@ -7162,6 +7163,8 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     else if (strCommand == NetMsgType::CBobtail)
     {
         // Handle receiving Bobtail data from the network
+        // MODEL - return CThinBlock::HandleMessage(vRecv, pfrom);
+        return CBobtail::HandleMessage(vRecv, pfrom);
     }
 
     else
