@@ -1,0 +1,7 @@
+Command: grep -rnw 'src/' -e "text"
+
+ProcessMessage() in 
+
+CheckBlockHeader() in src/thinblock.cpp and src/main.cpp
+
+Josh is working on new bobtail networking messages in src/protocol.cpp
