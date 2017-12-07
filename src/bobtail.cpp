@@ -17,7 +17,7 @@
 #include "policy/policy.h"
 #include "pow.h"
 #include "requestManager.h"
-#include "Bobtail.h"
+#include "bobtail.h"
 #include "timedata.h"
 #include "txmempool.h"
 #include "util.h"
