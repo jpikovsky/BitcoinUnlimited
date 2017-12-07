@@ -47,4 +47,7 @@ static const int THINBLOCKS_VERSION = 80001;
 //! Expedited Relay enabled in this version
 static const int EXPEDITED_VERSION = 80002;
 
+//! BOBTAIL enabled in this version
+static const int BOBTAIL_VERSION = 80003;
+
 #endif // BITCOIN_VERSION_H

@@ -49,6 +49,7 @@ const char *XPEDITEDBLK = "Xb";
 const char *XPEDITEDTxn = "Xt";
 const char *BUVERSION = "buversion";
 const char *BUVERACK = "buverack";
+const char *BOBTAIL = "bobtail";
 };
 
 static const char *ppszTypeName[] = {
@@ -74,7 +75,7 @@ const static std::string allNetMessageTypes[] = {
     NetMsgType::GET_XTHIN,
     // BUIP010 Xtreme Thinbocks - end section
     NetMsgType::XPEDITEDREQUEST, NetMsgType::XPEDITEDBLK, NetMsgType::XPEDITEDTxn, NetMsgType::BUVERSION,
-    NetMsgType::BUVERACK,
+    NetMsgType::BUVERACK, NetMsgType::BOBTAIL,
 };
 const static std::vector<std::string> allNetMessageTypesVec(allNetMessageTypes,
     allNetMessageTypes + ARRAYLEN(allNetMessageTypes));
