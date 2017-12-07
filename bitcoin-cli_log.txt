@@ -1,0 +1,327 @@
+    1  ls
+    2  cd bitcoin-abc/
+    3  ls
+    4  make
+    5  clear
+    6  cd ..
+    7  ls
+    8  git clone https://github.com/umass-forensics/2017-project-blockchain-tails.git
+    9  cd 2017-project-blockchain-tails/
+   10  cd writing
+   11  ls
+   12  cd scaling
+   13  ls
+   14  pdflatex main.tex
+   15  sudo at install texlive-latex-base
+   16  sudo apt install texlive-latex-base
+   17  pdflatex main.tex
+   18  ls
+   19  ./main.tex
+   20  pdftex main.tex
+   21  ls
+   22  open main.pdf
+   23  cd ~
+   24  ls
+   25  cd bitcoin-abc
+   26  make check
+   27  bitcoind -testnet bitcoin-cli -testnet
+   28  bitcoin-abc -testnet bitcoin-cli -testnet
+   29  ls
+   30  cd ..
+   31  ls
+   32  cd ..
+   33  ls
+   34  cd jimbob
+   35  ls
+   36  cd bitcoin-abc
+   37  ls
+   38  grep .conf
+   39  make install
+   40  sudo make install
+   41  ls
+   42  ls configure
+   43  ls
+   44  cd configure
+   45  nano configure
+   46  ls
+   47  bitcoin-cli
+   48  bitcoind
+   49  kill bitcoind
+   50  bitcoind -daemon
+   51  bitcoind stop
+   52  stop bitcoind
+   53  bitcoin-cli stop
+   54  cd /home/jimbob/.bitcoin
+   55  ls
+   56  cd bitcoin.conf
+   57  ls
+   58  cd ..
+   59  ls
+   60  cd bitcoin-abc
+   61  ./bitcoind
+   62  bitcoind
+   63  bitcoin-cli stop
+   64  cd /home/jim/.bitcoin
+   65  cd /home/jimbob/.bitcoin
+   66  ls
+   67  gedit bitcoin.conf
+   68  ls
+   69  reboot
+   70  cd bitcoin-abc
+   71  bitcoind -regtest -daemon
+   72  bitcoind
+   73  bitcoin-cli -regtest setgenerate true 10
+   74  make
+   75  bitcoind -regtest -daemon
+   76  killall bitcoind
+   77  bitcoind -regtest -daemon
+   78  top
+   79  cd ..
+   80  ls
+   81  cd ..
+   82  ls
+   83  cd jimbob
+   84  cd .bitcoin
+   85  ls
+   86  cd ..
+   87  ls
+   88  cd bitcoin-abc
+   89  bitcoin-cli
+   90  bitcoind -regtest -daemon
+   91  bitcoin-cli stop
+   92  cd ..
+   93  cd .bitcoin
+   94  gedit bitcoin.conf
+   95  rm bitcoin.conf
+   96  cd ..
+   97  cd bitcoin-abc
+   98  ls
+   99  bitcoin-cli stop
+  100  netstat
+  101  cd ..
+  102  cd .bitcoin
+  103  rm .lock
+  104  cd ..
+  105  cd bitcoin-abc
+  106  bitcoind -regtest -daemon
+  107  killall bitcoin-cli
+  108  killall bitcoind
+  109  bitcoind -regtest -daemon
+  110  bitcoin-cli regtest setgenerate true 1
+  111  reboot
+  112  bitcoind -regtest -daemon
+  113  bitcoin-cli -regtest setgenerate true 1
+  114  bitcoin-cli -regtest generate 1
+  115  gdb bitcoin-cli -regtest generate 1
+  116  gdb bitcoin-cli
+  117  gdb bitcoin-cli -regtest generate 1
+  118  bitcoin-cli -regtest generate 1
+  119  bitcoind -regtest generate 1
+  120  bitcoind --help
+  121  bitcoind stop
+  122  bitcoin-cli stop
+  123  bitcoin-abc-cli stop
+  124  bitcoin-cli stop
+  125  killall bitcoind
+  126  bitcoind
+  127  bitcoind regtest
+  128  reboot
+  129  bitcoind-cli -regtest generate 1
+  130  bitcoin-cli -regtest generate 1
+  131  bitcoin-cli -regtest generate true 1
+  132  bitcoin-cli -regtest getbalance
+  133  bitcoin-cli -regtest generate 1
+  134  bitcoin-cli -regtest getbalance
+  135  bitcoin-cli -regtest setgenerate true 1
+  136  bitcoin-cli -regtest setgenerate true 5
+  137  bitcoin-cli -regtest generate 5
+  138  bitcoin-cli -regtest getbalance
+  139  bitcoin-cli stop
+  140  bitcoind stop
+  141  bitcoin-cli stop
+  142  killall bitcoin-cli
+  143  killall bitcoind
+  144  cd bitcoin-abc
+  145  bitcoin-cli -regtest generate 1
+  146  bitcoin-cli
+  147  bitcoin-cli regtest
+  148  bitcoin-cli -regtest
+  149  bitcoin-cli -regtest generate 1
+  150  bitcoin-cli -regtest getinfo
+  151  bitcoin-cli -regtest generate 1
+  152  bitcoin-cli -regtest generate 1 -printtoconsole
+  153  bitcoin-cli -regtest -printtoconsole
+  154  bitcoin-cli -regtest generate 1
+  155  bitcoin-cli -regtest generate true 1
+  156  bitcoin-cli -regtest generate 2
+  157  bitcoin-cli -regtest setgenerate 2
+  158  bitcoin-cli -regtest generate 2
+  159  bitcoin-cli -regtest generate 10
+  160  bitcoin-cli -regtest generate 2
+  161  bitcoin-cli -regtest generate 10
+  162  bitcoin-cli -regtest generate 1
+  163  bitcoind -regtest -printtoterminal
+  164  cd bitcoin-abc
+  165  bitcoind -regtest -printtoterminal
+  166  bitcoind -regtest -printtoconsole
+  167  make
+  168  bitcoind -regtest -printtoconsole
+  169  make
+  170  bitcoind -regtest -printtoconsole
+  171  bitcoind -regtest 
+  172  bitcoind -regtest -printtoconsole
+  173  make
+  174  bitcoind -regtest -printtoconsole
+  175  make
+  176  sudo apt-get install libevent-dev
+  177  make check
+  178  make clean
+  179  make
+  180  bitcoind -regtest -printtoconsole
+  181  make
+  182  bitcoind -regtest -printtoconsole
+  183  make
+  184  bitcoind -regtest -printtoconsole
+  185  make
+  186  bitcoind -regtest -printtoconsole
+  187  make
+  188  bitcoind -regtest -printtoconsole
+  189  make
+  190  bitcoind -regtest -printtoconsole
+  191  make
+  192  bitcoind -regtest -printtoconsole
+  193  ping www.google.com
+  194  make
+  195  bitcoind -regtest -printtoconsole
+  196  make
+  197  bitcoind -regtest
+  198  bitcoind -regtest -printtoconsole
+  199  make
+  200  bitcoind -regtest -printtoconsole
+  201  make
+  202  bitcoind -regtest -printtoconsole
+  203  bitcoind -regtest
+  204  bitcoind -regtest -printtoconsole
+  205  make
+  206  bitcoind -regtest -printtoconsole
+  207  make install
+  208  make clean
+  209  make
+  210  bitcoind -regtest -printtoconsole
+  211  make install
+  212  sudo make install
+  213  bitcoind -regtest -printtoconsole
+  214  make 
+  215  make
+  216  sudo make install
+  217  bitcoind -regtest -printtoconsole
+  218  make
+  219  make check
+  220  make install
+  221  sudo make install
+  222  make check
+  223  bitcoind -regtest -printtoconsole
+  224  make
+  225  make install
+  226  sudo make install
+  227  make check
+  228  make
+  229  make install
+  230  sudo make install
+  231  bitcoind -regtest -printtoconsole
+  232  ls
+  233  nam -p exp1.nam
+  234  nam -p
+  235  cd bitcoin-abc
+  236  git pull
+  237  git stash
+  238  git reset --hard
+  239  git pull
+  240  cd ..
+  241  rm bitcoin-abc
+  242  rm -r bitcoin-abc
+  243  git clone https://github.com/jpikovsky/bitcoin-abc.git
+  244  cd bitcoin-abc/
+  245  git pull
+  246  git commit
+  247  git commit jpikovsk@umass.edu
+  248  git commit
+  249  git config --global user.email "jpikovsk@umass.edu"
+  250  git commit
+  251  git stage
+  252  git add .
+  253  git commit
+  254  git status
+  255  git push
+  256  cd ..
+  257  sudo apt-get install sublime-text2
+  258  sudo apt-get install sublime-text3
+  259  sudo apt-get install sublime-text
+  260  grep -nrl 'nNonce*'
+  261  ping www.google.com
+  262  restart networking
+  263  restart network
+  264  networking restart
+  265  network restart
+  266  restart service networking
+  267  restart service network
+  268  restart network service
+  269  restart networking service
+  270  sudo service networking restart
+  271  service networking restart
+  272  ping www.google.com
+  273  networking service restart
+  274  ping www.google.com
+  275  gedit /etc/network/interfaces
+  276  sudo gedit /etc/network/interfaces
+  277  sudo /etc/init.d/networking restart
+  278  sudo /etc/init.d/network-manager stop
+  279  sudo ifconfig eth0 up
+  280  sudo gedit /etc/network/interfaces
+  281  sudo ifconfig eth0 192.168.1.1
+  282  sudo gedit /etc/network/interfaces
+  283  sudo /etc/init.d/network-manager stop
+  284  sudo /etc/init.d/networking restart
+  285  networking service restart
+  286  service networking restart
+  287  reboot
+  288  cd ..
+  289  ls -a
+  290  cd debug/
+  291  ls -a
+  292  cd ..
+  293  ;s
+  294  ls -a
+  295  cd .bitcoin
+  296  ls
+  297  nano bitcoin.conf
+  298  ls
+  299  cd ..
+  300  ls
+  301  cd src
+  302  cd bu-src/
+  303  ./bitcoin-cli getinfo
+  304  cd debug/
+  305  ./bitcoin-cli getinfo
+  306  cd src
+  307  ./bitcoin-cli getinfo
+  308  cd ..
+  309  ls -a
+  310  cd .bitcoin
+  311  ls
+  312  nano bitcoin.conf
+  313  cd ..
+  314  cd src
+  315  cd bu-src/
+  316  cd debug/
+  317  cd src
+  318  ./bitcoin-cli
+  319  ./bitcoin-cli getinfo
+  320  ./bitcoin-cli getnewaddress
+  321  ./bitcoin-cli generate 101
+  322  ./bitcoin-cli
+  323  ./bitcoin-cli -help
+  324  history > bitcoin-cli_log.txt
+  325  nano bitcoin-cli_log.txt 
+  326  nano bitcoin-cli_log.txt
+  327  history > bitcoin-cli_log.txt
