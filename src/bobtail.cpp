@@ -17,7 +17,7 @@
 #include "policy/policy.h"
 #include "pow.h"
 #include "requestManager.h"
-#include "thinblock.h"
+#include "Bobtail.h"
 #include "timedata.h"
 #include "txmempool.h"
 #include "util.h"
@@ -27,7 +27,7 @@ using namespace std;
 
 static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, int &unnecessaryCount);
 
-CThinBlock::CThinBlock(const CBlock &block, CBloomFilter &filter)
+CBobtail::CBobtail(const CBlock &block, CBloomFilter &filter)
 {
     header = block.GetBlockHeader();
 
@@ -51,57 +51,57 @@ CThinBlock::CThinBlock(const CBlock &block, CBloomFilter &filter)
  * Handle an incoming thin block.  The block is fully validated, and if any transactions are missing, we fall
  * back to requesting a full block.
  */
-bool CThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom)
+bool CBobtail::HandleMessage(CDataStream &vRecv, CNode *pfrom)
 {
-    if (!pfrom->ThinBlockCapable())
+    if (!pfrom->BobtailCapable())
     {
         dosMan.Misbehaving(pfrom, 100);
-        return error("Thinblock message received from a non thinblock node, peer=%s", pfrom->GetLogName());
+        return error("Bobtail message received from a non Bobtail node, peer=%s", pfrom->GetLogName());
     }
 
-    CThinBlock thinBlock;
-    vRecv >> thinBlock;
+    CBobtail Bobtail;
+    vRecv >> Bobtail;
 
     // Message consistency checking
-    if (!IsThinBlockValid(pfrom, thinBlock.vMissingTx, thinBlock.header))
+    if (!IsBobtailValid(pfrom, Bobtail.vMissingTx, Bobtail.header))
     {
         dosMan.Misbehaving(pfrom, 100);
-        return error("Invalid thinblock received");
+        return error("Invalid Bobtail received");
     }
 
     // Is there a previous block or header to connect with?
     {
         LOCK(cs_main);
-        uint256 prevHash = thinBlock.header.hashPrevBlock;
+        uint256 prevHash = Bobtail.header.hashPrevBlock;
         BlockMap::iterator mi = mapBlockIndex.find(prevHash);
         if (mi == mapBlockIndex.end())
         {
-            return error("thinblock from peer %s will not connect, unknown previous block %s", pfrom->GetLogName(),
+            return error("Bobtail from peer %s will not connect, unknown previous block %s", pfrom->GetLogName(),
                 prevHash.ToString());
         }
         CBlockIndex *pprev = mi->second;
         CValidationState state;
-        if (!ContextualCheckBlockHeader(thinBlock.header, state, pprev))
+        if (!ContextualCheckBlockHeader(Bobtail.header, state, pprev))
         {
             // Thin block does not fit within our blockchain
             dosMan.Misbehaving(pfrom, 100);
             return error(
-                "thinblock from peer %s contextual error: %s", pfrom->GetLogName(), state.GetRejectReason().c_str());
+                "Bobtail from peer %s contextual error: %s", pfrom->GetLogName(), state.GetRejectReason().c_str());
         }
     }
 
-    CInv inv(MSG_BLOCK, thinBlock.header.GetHash());
-    int nSizeThinBlock = ::GetSerializeSize(thinBlock, SER_NETWORK, PROTOCOL_VERSION);
-    LogPrint("thin", "received thinblock %s from peer %s of %d bytes\n", inv.hash.ToString(), pfrom->GetLogName(),
-        nSizeThinBlock);
+    CInv inv(MSG_BLOCK, Bobtail.header.GetHash());
+    int nSizeBobtail = ::GetSerializeSize(Bobtail, SER_NETWORK, PROTOCOL_VERSION);
+    LogPrint("thin", "received Bobtail %s from peer %s of %d bytes\n", inv.hash.ToString(), pfrom->GetLogName(),
+        nSizeBobtail);
 
-    // Ban a node for sending unrequested thinblocks unless from an expedited node.
+    // Ban a node for sending unrequested Bobtails unless from an expedited node.
     {
-        LOCK(pfrom->cs_mapthinblocksinflight);
-        if (!pfrom->mapThinBlocksInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
+        LOCK(pfrom->cs_mapBobtailsinflight);
+        if (!pfrom->mapBobtailsInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
         {
             dosMan.Misbehaving(pfrom, 100);
-            return error("unrequested thinblock from peer %s", pfrom->GetLogName());
+            return error("unrequested Bobtail from peer %s", pfrom->GetLogName());
         }
     }
 
@@ -114,50 +114,50 @@ bool CThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     if (fAlreadyHave)
     {
         requester.AlreadyReceived(inv);
-        thindata.ClearThinBlockData(pfrom, inv.hash);
+        thindata.ClearBobtailData(pfrom, inv.hash);
 
-        LogPrint("thin", "Received thinblock but returning because we already have this block %s on disk, peer=%s\n",
+        LogPrint("thin", "Received Bobtail but returning because we already have this block %s on disk, peer=%s\n",
             inv.hash.ToString(), pfrom->GetLogName());
         return true;
     }
 
-    return thinBlock.process(pfrom, nSizeThinBlock);
+    return Bobtail.process(pfrom, nSizeBobtail);
 }
 
-bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
+bool CBobtail::process(CNode *pfrom, int nSizeBobtail)
 {
-    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the thinblock
+    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the Bobtail
     bool fXVal;
     {
         LOCK(cs_main);
         fXVal = (header.hashPrevBlock == chainActive.Tip()->GetBlockHash()) ? true : false;
     }
 
-    thindata.ClearThinBlockData(pfrom);
-    pfrom->nSizeThinBlock = nSizeThinBlock;
+    thindata.ClearBobtailData(pfrom);
+    pfrom->nSizeBobtail = nSizeBobtail;
 
-    pfrom->thinBlock.nVersion = header.nVersion;
-    pfrom->thinBlock.nBits = header.nBits;
-    pfrom->thinBlock.nNonce = header.nNonce;
-    pfrom->thinBlock.nTime = header.nTime;
-    pfrom->thinBlock.hashMerkleRoot = header.hashMerkleRoot;
-    pfrom->thinBlock.hashPrevBlock = header.hashPrevBlock;
-    pfrom->thinBlockHashes = vTxHashes;
+    pfrom->Bobtail.nVersion = header.nVersion;
+    pfrom->Bobtail.nBits = header.nBits;
+    pfrom->Bobtail.nNonce = header.nNonce;
+    pfrom->Bobtail.nTime = header.nTime;
+    pfrom->Bobtail.hashMerkleRoot = header.hashMerkleRoot;
+    pfrom->Bobtail.hashPrevBlock = header.hashPrevBlock;
+    pfrom->BobtailHashes = vTxHashes;
 
-    thindata.AddThinBlockBytes(vTxHashes.size() * sizeof(uint256), pfrom); // start counting bytes
+    thindata.AddBobtailBytes(vTxHashes.size() * sizeof(uint256), pfrom); // start counting bytes
 
     // Check that the merkleroot matches the merkelroot calculated from the hashes provided.
     bool mutated;
     uint256 merkleroot = ComputeMerkleRoot(vTxHashes, &mutated);
     if (header.hashMerkleRoot != merkleroot || mutated)
     {
-        thindata.ClearThinBlockData(pfrom, header.GetHash());
+        thindata.ClearBobtailData(pfrom, header.GetHash());
 
         dosMan.Misbehaving(pfrom, 100);
-        return error("Thinblock merkle root does not match computed merkle root, peer=%s", pfrom->GetLogName());
+        return error("Bobtail merkle root does not match computed merkle root, peer=%s", pfrom->GetLogName());
     }
 
-    // Create the mapMissingTx from all the supplied tx's in the xthinblock
+    // Create the mapMissingTx from all the supplied tx's in the xBobtail
     BOOST_FOREACH (const CTransaction tx, vMissingTx)
         pfrom->mapMissingTx[tx.GetHash().GetCheapHash()] = tx;
 
@@ -170,40 +170,40 @@ bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
         if (!ReconstructBlock(pfrom, fXVal, missingCount, unnecessaryCount))
             return false;
 
-        pfrom->thinBlockWaitingForTxns = missingCount;
-        LogPrint("thin", "Thinblock %s waiting for: %d, unnecessary: %d, total txns: %d received txns: %d peer=%s\n",
-            pfrom->thinBlock.GetHash().ToString(), pfrom->thinBlockWaitingForTxns, unnecessaryCount,
-            pfrom->thinBlock.vtx.size(), pfrom->mapMissingTx.size(), pfrom->GetLogName());
+        pfrom->BobtailWaitingForTxns = missingCount;
+        LogPrint("thin", "Bobtail %s waiting for: %d, unnecessary: %d, total txns: %d received txns: %d peer=%s\n",
+            pfrom->Bobtail.GetHash().ToString(), pfrom->BobtailWaitingForTxns, unnecessaryCount,
+            pfrom->Bobtail.vtx.size(), pfrom->mapMissingTx.size(), pfrom->GetLogName());
     } // end lock cs_orphancache, mempool.cs, cs_xval
-    LogPrint("thin", "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
+    LogPrint("thin", "Total in memory Bobtailbytes size is %ld bytes\n", thindata.GetBobtailBytes());
 
     // Clear out data we no longer need before processing block.
-    pfrom->thinBlockHashes.clear();
+    pfrom->BobtailHashes.clear();
 
-    if (pfrom->thinBlockWaitingForTxns == 0)
+    if (pfrom->BobtailWaitingForTxns == 0)
     {
         // We have all the transactions now that are in this block: try to reassemble and process.
-        pfrom->thinBlockWaitingForTxns = -1;
-        int blockSize = ::GetSerializeSize(pfrom->thinBlock, SER_NETWORK, CBlock::CURRENT_VERSION);
+        pfrom->BobtailWaitingForTxns = -1;
+        int blockSize = ::GetSerializeSize(pfrom->Bobtail, SER_NETWORK, CBlock::CURRENT_VERSION);
         LogPrint("thin",
-            "Reassembled thinblock for %s (%d bytes). Message was %d bytes, compression ratio %3.2f peer=%s\n",
-            pfrom->thinBlock.GetHash().ToString(), blockSize, nSizeThinBlock,
-            ((float)blockSize) / ((float)nSizeThinBlock), pfrom->GetLogName());
+            "Reassembled Bobtail for %s (%d bytes). Message was %d bytes, compression ratio %3.2f peer=%s\n",
+            pfrom->Bobtail.GetHash().ToString(), blockSize, nSizeBobtail,
+            ((float)blockSize) / ((float)nSizeBobtail), pfrom->GetLogName());
 
         // Update run-time statistics of thin block bandwidth savings
-        thindata.UpdateInBound(nSizeThinBlock, blockSize);
+        thindata.UpdateInBound(nSizeBobtail, blockSize);
         LogPrint("thin", "thin block stats: %s\n", thindata.ToString());
 
-        PV->HandleBlockMessage(pfrom, NetMsgType::THINBLOCK, pfrom->thinBlock, GetInv());
+        PV->HandleBlockMessage(pfrom, NetMsgType::Bobtail, pfrom->Bobtail, GetInv());
     }
-    else if (pfrom->thinBlockWaitingForTxns > 0)
+    else if (pfrom->BobtailWaitingForTxns > 0)
     {
         // This marks the end of the transactions we've received. If we get this and we have NOT been able to
         // finish reassembling the block, we need to re-request the full regular block
-        LogPrint("thin", "Missing %d Thinblock transactions, re-requesting a regular block from peer=%s\n",
-            pfrom->thinBlockWaitingForTxns, pfrom->GetLogName());
-        thindata.UpdateInBoundReRequestedTx(pfrom->thinBlockWaitingForTxns);
-        thindata.ClearThinBlockData(pfrom, header.GetHash());
+        LogPrint("thin", "Missing %d Bobtail transactions, re-requesting a regular block from peer=%s\n",
+            pfrom->BobtailWaitingForTxns, pfrom->GetLogName());
+        thindata.UpdateInBoundReRequestedTx(pfrom->BobtailWaitingForTxns);
+        thindata.ClearBobtailData(pfrom, header.GetHash());
 
         vector<CInv> vGetData;
         vGetData.push_back(CInv(MSG_BLOCK, header.GetHash()));
@@ -217,7 +217,7 @@ bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
 }
 
 
-CXThinBlock::CXThinBlock(const CBlock &block, CBloomFilter *filter)
+CXBobtail::CXBobtail(const CBlock &block, CBloomFilter *filter)
 {
     header = block.GetBlockHeader();
     this->collision = false;
@@ -244,7 +244,7 @@ CXThinBlock::CXThinBlock(const CBlock &block, CBloomFilter *filter)
     }
 }
 
-CXThinBlock::CXThinBlock(const CBlock &block)
+CXBobtail::CXBobtail(const CBlock &block)
 {
     header = block.GetBlockHeader();
     this->collision = false;
@@ -276,15 +276,15 @@ CXThinBlock::CXThinBlock(const CBlock &block)
     }
 }
 
-CXThinBlockTx::CXThinBlockTx(uint256 blockHash, vector<CTransaction> &vTx)
+CXBobtailTx::CXBobtailTx(uint256 blockHash, vector<CTransaction> &vTx)
 {
     blockhash = blockHash;
     vMissingTx = vTx;
 }
 
-bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
+bool CXBobtailTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
 {
-    if (!pfrom->ThinBlockCapable())
+    if (!pfrom->BobtailCapable())
     {
         dosMan.Misbehaving(pfrom, 100);
         return error("xblocktx message received from a non XTHIN node, peer=%s", pfrom->GetLogName());
@@ -292,25 +292,25 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
 
     std::string strCommand = NetMsgType::XBLOCKTX;
     size_t msgSize = vRecv.size();
-    CXThinBlockTx thinBlockTx;
-    vRecv >> thinBlockTx;
+    CXBobtailTx BobtailTx;
+    vRecv >> BobtailTx;
 
     // Message consistency checking
-    CInv inv(MSG_XTHINBLOCK, thinBlockTx.blockhash);
-    if (thinBlockTx.vMissingTx.empty() || thinBlockTx.blockhash.IsNull())
+    CInv inv(MSG_XBobtail, BobtailTx.blockhash);
+    if (BobtailTx.vMissingTx.empty() || BobtailTx.blockhash.IsNull())
     {
-        thindata.ClearThinBlockData(pfrom, inv.hash);
+        thindata.ClearBobtailData(pfrom, inv.hash);
 
         dosMan.Misbehaving(pfrom, 100);
-        return error("incorrectly constructed xblocktx or inconsistent thinblock data received.  Banning peer=%s",
+        return error("incorrectly constructed xblocktx or inconsistent Bobtail data received.  Banning peer=%s",
             pfrom->GetLogName());
     }
 
     LogPrint("thin", "received xblocktx for %s peer=%s\n", inv.hash.ToString(), pfrom->GetLogName());
     {
         // Do not process unrequested xblocktx unless from an expedited node.
-        LOCK(pfrom->cs_mapthinblocksinflight);
-        if (!pfrom->mapThinBlocksInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
+        LOCK(pfrom->cs_mapBobtailsinflight);
+        if (!pfrom->mapBobtailsInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
         {
             dosMan.Misbehaving(pfrom, 10);
             return error(
@@ -327,42 +327,42 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     if (fAlreadyHave)
     {
         requester.AlreadyReceived(inv);
-        thindata.ClearThinBlockData(pfrom, inv.hash);
+        thindata.ClearBobtailData(pfrom, inv.hash);
 
         LogPrint("thin", "Received xblocktx but returning because we already have this block %s on disk, peer=%s\n",
             inv.hash.ToString(), pfrom->GetLogName());
         return true;
     }
 
-    // Create the mapMissingTx from all the supplied tx's in the xthinblock
-    BOOST_FOREACH (const CTransaction tx, thinBlockTx.vMissingTx)
+    // Create the mapMissingTx from all the supplied tx's in the xBobtail
+    BOOST_FOREACH (const CTransaction tx, BobtailTx.vMissingTx)
         pfrom->mapMissingTx[tx.GetHash().GetCheapHash()] = tx;
 
-    // Get the full hashes from the xblocktx and add them to the thinBlockHashes vector.  These should
+    // Get the full hashes from the xblocktx and add them to the BobtailHashes vector.  These should
     // be all the missing or null hashes that we re-requested.
     int count = 0;
-    for (size_t i = 0; i < pfrom->thinBlockHashes.size(); i++)
+    for (size_t i = 0; i < pfrom->BobtailHashes.size(); i++)
     {
-        if (pfrom->thinBlockHashes[i].IsNull())
+        if (pfrom->BobtailHashes[i].IsNull())
         {
-            std::map<uint64_t, CTransaction>::iterator val = pfrom->mapMissingTx.find(pfrom->xThinBlockHashes[i]);
+            std::map<uint64_t, CTransaction>::iterator val = pfrom->mapMissingTx.find(pfrom->xBobtailHashes[i]);
             if (val != pfrom->mapMissingTx.end())
             {
-                pfrom->thinBlockHashes[i] = val->second.GetHash();
+                pfrom->BobtailHashes[i] = val->second.GetHash();
             }
             count++;
         }
     }
-    LogPrint("thin", "Got %d Re-requested txs, needed %d of them from peer=%s\n", thinBlockTx.vMissingTx.size(), count,
+    LogPrint("thin", "Got %d Re-requested txs, needed %d of them from peer=%s\n", BobtailTx.vMissingTx.size(), count,
         pfrom->GetLogName());
 
     // At this point we should have all the full hashes in the block. Check that the merkle
     // root in the block header matches the merkel root calculated from the hashes provided.
     bool mutated;
-    uint256 merkleroot = ComputeMerkleRoot(pfrom->thinBlockHashes, &mutated);
-    if (pfrom->thinBlock.hashMerkleRoot != merkleroot || mutated)
+    uint256 merkleroot = ComputeMerkleRoot(pfrom->BobtailHashes, &mutated);
+    if (pfrom->Bobtail.hashMerkleRoot != merkleroot || mutated)
     {
-        thindata.ClearThinBlockData(pfrom, inv.hash);
+        thindata.ClearBobtailData(pfrom, inv.hash);
 
         dosMan.Misbehaving(pfrom, 100);
         return error("Merkle root for %s does not match computed merkle root, peer=%s", inv.hash.ToString(),
@@ -370,17 +370,17 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     }
     LogPrint("thin", "Merkle Root check passed for %s peer=%s\n", inv.hash.ToString(), pfrom->GetLogName());
 
-    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the thinblock
+    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the Bobtail
     bool fXVal;
     {
         LOCK(cs_main);
-        fXVal = (pfrom->thinBlock.hashPrevBlock == chainActive.Tip()->GetBlockHash()) ? true : false;
+        fXVal = (pfrom->Bobtail.hashPrevBlock == chainActive.Tip()->GetBlockHash()) ? true : false;
     }
 
     int missingCount = 0;
     int unnecessaryCount = 0;
     // Look for each transaction in our various pools and buffers.
-    // With xThinBlocks the vTxHashes contains only the first 8 bytes of the tx hash.
+    // With xBobtails the vTxHashes contains only the first 8 bytes of the tx hash.
     {
         LOCK(cs_orphancache);
         LOCK2(mempool.cs, cs_xval);
@@ -393,11 +393,11 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     // while we were retreiving missing transactions.
     if (missingCount > 0)
     {
-        // Since we can't process this thinblock then clear out the data from memory
-        thindata.ClearThinBlockData(pfrom, inv.hash);
+        // Since we can't process this Bobtail then clear out the data from memory
+        thindata.ClearBobtailData(pfrom, inv.hash);
 
         std::vector<CInv> vGetData;
-        vGetData.push_back(CInv(MSG_BLOCK, thinBlockTx.blockhash));
+        vGetData.push_back(CInv(MSG_BLOCK, BobtailTx.blockhash));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
         return error("Still missing transactions after reconstructing block, peer=%s: re-requesting a full block",
             pfrom->GetLogName());
@@ -405,43 +405,43 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     else
     {
         // We have all the transactions now that are in this block: try to reassemble and process.
-        CInv inv(CInv(MSG_BLOCK, thinBlockTx.blockhash));
+        CInv inv(CInv(MSG_BLOCK, BobtailTx.blockhash));
 
-        // for compression statistics, we have to add up the size of xthinblock and the re-requested thinBlockTx.
-        int nSizeThinBlockTx = msgSize;
-        int blockSize = ::GetSerializeSize(pfrom->thinBlock, SER_NETWORK, CBlock::CURRENT_VERSION);
-        LogPrint("thin", "Reassembled xblocktx for %s (%d bytes). Message was %d bytes (thinblock) and %d bytes "
+        // for compression statistics, we have to add up the size of xBobtail and the re-requested BobtailTx.
+        int nSizeBobtailTx = msgSize;
+        int blockSize = ::GetSerializeSize(pfrom->Bobtail, SER_NETWORK, CBlock::CURRENT_VERSION);
+        LogPrint("thin", "Reassembled xblocktx for %s (%d bytes). Message was %d bytes (Bobtail) and %d bytes "
                          "(re-requested tx), compression ratio %3.2f, peer=%s\n",
-            pfrom->thinBlock.GetHash().ToString(), blockSize, pfrom->nSizeThinBlock, nSizeThinBlockTx,
-            ((float)blockSize) / ((float)pfrom->nSizeThinBlock + (float)nSizeThinBlockTx), pfrom->GetLogName());
+            pfrom->Bobtail.GetHash().ToString(), blockSize, pfrom->nSizeBobtail, nSizeBobtailTx,
+            ((float)blockSize) / ((float)pfrom->nSizeBobtail + (float)nSizeBobtailTx), pfrom->GetLogName());
 
         // Update run-time statistics of thin block bandwidth savings.
-        // We add the original thinblock size with the size of transactions that were re-requested.
-        // This is NOT double counting since we never accounted for the original thinblock due to the re-request.
-        thindata.UpdateInBound(nSizeThinBlockTx + pfrom->nSizeThinBlock, blockSize);
+        // We add the original Bobtail size with the size of transactions that were re-requested.
+        // This is NOT double counting since we never accounted for the original Bobtail due to the re-request.
+        thindata.UpdateInBound(nSizeBobtailTx + pfrom->nSizeBobtail, blockSize);
         LogPrint("thin", "thin block stats: %s\n", thindata.ToString());
 
-        PV->HandleBlockMessage(pfrom, strCommand, pfrom->thinBlock, inv);
+        PV->HandleBlockMessage(pfrom, strCommand, pfrom->Bobtail, inv);
     }
 
     return true;
 }
 
-CXRequestThinBlockTx::CXRequestThinBlockTx(uint256 blockHash, set<uint64_t> &setHashesToRequest)
+CXRequestBobtailTx::CXRequestBobtailTx(uint256 blockHash, set<uint64_t> &setHashesToRequest)
 {
     blockhash = blockHash;
     setCheapHashesToRequest = setHashesToRequest;
 }
 
-bool CXRequestThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
+bool CXRequestBobtailTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
 {
-    if (!pfrom->ThinBlockCapable())
+    if (!pfrom->BobtailCapable())
     {
         dosMan.Misbehaving(pfrom, 100);
         return error("get_xblocktx message received from a non XTHIN node, peer=%s", pfrom->GetLogName());
     }
 
-    CXRequestThinBlockTx thinRequestBlockTx;
+    CXRequestBobtailTx thinRequestBlockTx;
     vRecv >> thinRequestBlockTx;
 
     // Message consistency checking
@@ -504,15 +504,15 @@ bool CXRequestThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
                 }
             }
         }
-        CXThinBlockTx thinBlockTx(thinRequestBlockTx.blockhash, vTx);
-        pfrom->PushMessage(NetMsgType::XBLOCKTX, thinBlockTx);
+        CXBobtailTx BobtailTx(thinRequestBlockTx.blockhash, vTx);
+        pfrom->PushMessage(NetMsgType::XBLOCKTX, BobtailTx);
         pfrom->blocksSent += 1;
     }
 
     return true;
 }
 
-bool CXThinBlock::CheckBlockHeader(const CBlockHeader &block, CValidationState &state)
+bool CXBobtail::CheckBlockHeader(const CBlockHeader &block, CValidationState &state)
 {
     // Check proof of work matches claimed amount
     if (!CheckProofOfWork(header.GetHash(), header.nBits, Params().GetConsensus()))
@@ -530,47 +530,47 @@ bool CXThinBlock::CheckBlockHeader(const CBlockHeader &block, CValidationState &
  * Handle an incoming Xthin or Xpedited block
  * Once the block is validated apart from the Merkle root, forward the Xpedited block with a hop count of nHops.
  */
-bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strCommand, unsigned nHops)
+bool CXBobtail::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strCommand, unsigned nHops)
 {
-    if (!pfrom->ThinBlockCapable())
+    if (!pfrom->BobtailCapable())
     {
         dosMan.Misbehaving(pfrom, 5);
         return error("%s message received from a non XTHIN node, peer=%s", strCommand, pfrom->GetLogName());
     }
 
-    int nSizeThinBlock = vRecv.size();
+    int nSizeBobtail = vRecv.size();
     CInv inv(MSG_BLOCK, uint256());
 
-    CXThinBlock thinBlock;
-    vRecv >> thinBlock;
+    CXBobtail Bobtail;
+    vRecv >> Bobtail;
 
     {
         LOCK(cs_main);
 
         // Message consistency checking (FIXME: some redundancy here with AcceptBlockHeader)
-        if (!IsThinBlockValid(pfrom, thinBlock.vMissingTx, thinBlock.header))
+        if (!IsBobtailValid(pfrom, Bobtail.vMissingTx, Bobtail.header))
         {
             dosMan.Misbehaving(pfrom, 100);
             LogPrintf("Received an invalid %s from peer %s\n", strCommand, pfrom->GetLogName());
 
-            thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
+            thindata.ClearBobtailData(pfrom, Bobtail.header.GetHash());
             return false;
         }
 
         // Is there a previous block or header to connect with?
         {
-            uint256 prevHash = thinBlock.header.hashPrevBlock;
+            uint256 prevHash = Bobtail.header.hashPrevBlock;
             BlockMap::iterator mi = mapBlockIndex.find(prevHash);
             if (mi == mapBlockIndex.end())
             {
-                return error("xthinblock from peer %s will not connect, unknown previous block %s", pfrom->GetLogName(),
+                return error("xBobtail from peer %s will not connect, unknown previous block %s", pfrom->GetLogName(),
                     prevHash.ToString());
             }
         }
 
         CValidationState state;
         CBlockIndex *pIndex = NULL;
-        if (!AcceptBlockHeader(thinBlock.header, state, Params(), &pIndex))
+        if (!AcceptBlockHeader(Bobtail.header, state, Params(), &pIndex))
         {
             int nDoS;
             if (state.IsInvalid(nDoS))
@@ -580,15 +580,15 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
                 LogPrintf("Received an invalid %s header from peer %s\n", strCommand, pfrom->GetLogName());
             }
 
-            thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
+            thindata.ClearBobtailData(pfrom, Bobtail.header.GetHash());
             return false;
         }
 
         // pIndex should always be set by AcceptBlockHeader
         if (!pIndex)
         {
-            LogPrintf("INTERNAL ERROR: pIndex null in CXThinBlock::HandleMessage");
-            thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
+            LogPrintf("INTERNAL ERROR: pIndex null in CXBobtail::HandleMessage");
+            thindata.ClearBobtailData(pfrom, Bobtail.header.GetHash());
             return true;
         }
 
@@ -601,10 +601,10 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             // Tell the Request Manager we received this block
             requester.AlreadyReceived(inv);
 
-            thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
-            LogPrint("thin", "Received xthinblock but returning because we already have block data %s from peer %s hop"
+            thindata.ClearBobtailData(pfrom, Bobtail.header.GetHash());
+            LogPrint("thin", "Received xBobtail but returning because we already have block data %s from peer %s hop"
                              " %d size %d bytes\n",
-                inv.hash.ToString(), pfrom->GetLogName(), nHops, nSizeThinBlock);
+                inv.hash.ToString(), pfrom->GetLogName(), nHops, nSizeBobtail);
             return true;
         }
 
@@ -615,29 +615,29 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             vGetData.push_back(inv);
             pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
 
-            thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
+            thindata.ClearBobtailData(pfrom, Bobtail.header.GetHash());
 
             LogPrintf("%s %s from peer %s received but does not extend longest chain; requesting full block\n",
                 strCommand, inv.hash.ToString(), pfrom->GetLogName());
             return true;
         }
 
-        // If this is an expedited block then add and entry to mapThinBlocksInFlight.
+        // If this is an expedited block then add and entry to mapBobtailsInFlight.
         if (nHops > 0 && connmgr->IsExpeditedUpstream(pfrom))
         {
-            AddThinBlockInFlight(pfrom, inv.hash);
+            AddBobtailInFlight(pfrom, inv.hash);
 
             LogPrint("thin", "Received new expedited %s %s from peer %s hop %d size %d bytes\n", strCommand,
-                inv.hash.ToString(), pfrom->GetLogName(), nHops, nSizeThinBlock);
+                inv.hash.ToString(), pfrom->GetLogName(), nHops, nSizeBobtail);
         }
         else
         {
             LogPrint("thin", "Received %s %s from peer %s. Size %d bytes.\n", strCommand, inv.hash.ToString(),
-                pfrom->GetLogName(), nSizeThinBlock);
+                pfrom->GetLogName(), nSizeBobtail);
 
-            // Do not process unrequested xthinblocks unless from an expedited node.
-            LOCK(pfrom->cs_mapthinblocksinflight);
-            if (!pfrom->mapThinBlocksInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
+            // Do not process unrequested xBobtails unless from an expedited node.
+            LOCK(pfrom->cs_mapBobtailsinflight);
+            if (!pfrom->mapBobtailsInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
             {
                 dosMan.Misbehaving(pfrom, 10);
                 return error(
@@ -648,42 +648,42 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
 
     // Send expedited block without checking merkle root.
     if (!IsRecentlyExpeditedAndStore(inv.hash))
-        SendExpeditedBlock(thinBlock, nHops, pfrom);
+        SendExpeditedBlock(Bobtail, nHops, pfrom);
 
-    return thinBlock.process(pfrom, nSizeThinBlock, strCommand);
+    return Bobtail.process(pfrom, nSizeBobtail, strCommand);
 }
 
-bool CXThinBlock::process(CNode *pfrom,
-    int nSizeThinBlock,
+bool CXBobtail::process(CNode *pfrom,
+    int nSizeBobtail,
     string strCommand) // TODO: request from the "best" txn source not necessarily from the block source
 {
-    // In PV we must prevent two thinblocks from simulaneously processing from that were recieved from the
+    // In PV we must prevent two Bobtails from simulaneously processing from that were recieved from the
     // same peer. This would only happen as in the example of an expedited block coming in
     // after an xthin request, because we would never explicitly request two xthins from the same peer.
     if (PV->IsAlreadyValidating(pfrom->id))
         return false;
 
-    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the thinblock
+    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the Bobtail
     bool fXVal;
     {
         LOCK(cs_main);
         fXVal = (header.hashPrevBlock == chainActive.Tip()->GetBlockHash()) ? true : false;
     }
 
-    thindata.ClearThinBlockData(pfrom);
-    pfrom->nSizeThinBlock = nSizeThinBlock;
+    thindata.ClearBobtailData(pfrom);
+    pfrom->nSizeBobtail = nSizeBobtail;
 
-    pfrom->thinBlock.nVersion = header.nVersion;
-    pfrom->thinBlock.nBits = header.nBits;
-    pfrom->thinBlock.nNonce = header.nNonce;
-    pfrom->thinBlock.nTime = header.nTime;
-    pfrom->thinBlock.hashMerkleRoot = header.hashMerkleRoot;
-    pfrom->thinBlock.hashPrevBlock = header.hashPrevBlock;
-    pfrom->xThinBlockHashes = vTxHashes;
+    pfrom->Bobtail.nVersion = header.nVersion;
+    pfrom->Bobtail.nBits = header.nBits;
+    pfrom->Bobtail.nNonce = header.nNonce;
+    pfrom->Bobtail.nTime = header.nTime;
+    pfrom->Bobtail.hashMerkleRoot = header.hashMerkleRoot;
+    pfrom->Bobtail.hashPrevBlock = header.hashPrevBlock;
+    pfrom->xBobtailHashes = vTxHashes;
 
-    thindata.AddThinBlockBytes(vTxHashes.size() * sizeof(uint64_t), pfrom); // start counting bytes
+    thindata.AddBobtailBytes(vTxHashes.size() * sizeof(uint64_t), pfrom); // start counting bytes
 
-    // Create the mapMissingTx from all the supplied tx's in the xthinblock
+    // Create the mapMissingTx from all the supplied tx's in the xBobtail
     BOOST_FOREACH (const CTransaction tx, vMissingTx)
         pfrom->mapMissingTx[tx.GetHash().GetCheapHash()] = tx;
 
@@ -727,7 +727,7 @@ bool CXThinBlock::process(CNode *pfrom,
         {
             uint64_t cheapHash = (*mi).first;
             // Check for cheap hash collision. Only mark as collision if the full hash is not the same,
-            // because the same tx could have been received into the mempool during the request of the xthinblock.
+            // because the same tx could have been received into the mempool during the request of the xBobtail.
             // In that case we would have the same transaction twice, so it is not a real cheap hash collision and we
             // continue normally.
             const uint256 existingHash = mapPartialTxHash[cheapHash];
@@ -748,10 +748,10 @@ bool CXThinBlock::process(CNode *pfrom,
             BOOST_FOREACH (const uint64_t &cheapHash, vTxHashes)
             {
                 if (mapPartialTxHash.find(cheapHash) != mapPartialTxHash.end())
-                    pfrom->thinBlockHashes.push_back(mapPartialTxHash[cheapHash]);
+                    pfrom->BobtailHashes.push_back(mapPartialTxHash[cheapHash]);
                 else
                 {
-                    pfrom->thinBlockHashes.push_back(nullhash); // placeholder
+                    pfrom->BobtailHashes.push_back(nullhash); // placeholder
                     setHashesToRequest.insert(cheapHash);
                 }
             }
@@ -763,7 +763,7 @@ bool CXThinBlock::process(CNode *pfrom,
             if (setHashesToRequest.empty())
             {
                 bool mutated;
-                uint256 merkleroot = ComputeMerkleRoot(pfrom->thinBlockHashes, &mutated);
+                uint256 merkleroot = ComputeMerkleRoot(pfrom->BobtailHashes, &mutated);
                 if (header.hashMerkleRoot != merkleroot || mutated)
                 {
                     fMerkleRootCorrect = false;
@@ -776,74 +776,74 @@ bool CXThinBlock::process(CNode *pfrom,
             }
         }
     } // End locking cs_orphancache, mempool.cs and cs_xval
-    LogPrint("thin", "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
+    LogPrint("thin", "Total in memory Bobtailbytes size is %ld bytes\n", thindata.GetBobtailBytes());
 
     // These must be checked outside of the mempool.cs lock or deadlock may occur.
     // A merkle root mismatch here does not cause a ban because and expedited node will forward an xthin
     // without checking the merkle root, therefore we don't want to ban our expedited nodes. Just re-request
-    // a full thinblock if a mismatch occurs.
+    // a full Bobtail if a mismatch occurs.
     // Also, there is a remote possiblity of a Tx hash collision therefore if it occurs we re-request a normal
-    // thinblock which has the full Tx hash data rather than just the truncated hash.
+    // Bobtail which has the full Tx hash data rather than just the truncated hash.
     if (collision || !fMerkleRootCorrect)
     {
         vector<CInv> vGetData;
-        vGetData.push_back(CInv(MSG_THINBLOCK, header.GetHash()));
+        vGetData.push_back(CInv(MSG_Bobtail, header.GetHash()));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
 
         if (!fMerkleRootCorrect)
             return error(
-                "mismatched merkle root on xthinblock: rerequesting a thinblock, peer=%s", pfrom->GetLogName());
+                "mismatched merkle root on xBobtail: rerequesting a Bobtail, peer=%s", pfrom->GetLogName());
         else
-            return error("TX HASH COLLISION for xthinblock: re-requesting a thinblock, peer=%s", pfrom->GetLogName());
+            return error("TX HASH COLLISION for xBobtail: re-requesting a Bobtail, peer=%s", pfrom->GetLogName());
 
-        thindata.ClearThinBlockData(pfrom, header.GetHash());
+        thindata.ClearBobtailData(pfrom, header.GetHash());
         return true;
     }
 
-    pfrom->thinBlockWaitingForTxns = missingCount;
-    LogPrint("thin", "xthinblock waiting for: %d, unnecessary: %d, total txns: %d received txns: %d\n",
-        pfrom->thinBlockWaitingForTxns, unnecessaryCount, pfrom->thinBlock.vtx.size(), pfrom->mapMissingTx.size());
+    pfrom->BobtailWaitingForTxns = missingCount;
+    LogPrint("thin", "xBobtail waiting for: %d, unnecessary: %d, total txns: %d received txns: %d\n",
+        pfrom->BobtailWaitingForTxns, unnecessaryCount, pfrom->Bobtail.vtx.size(), pfrom->mapMissingTx.size());
 
     // If there are any missing hashes or transactions then we request them here.
     // This must be done outside of the mempool.cs lock or may deadlock.
     if (setHashesToRequest.size() > 0)
     {
-        pfrom->thinBlockWaitingForTxns = setHashesToRequest.size();
-        CXRequestThinBlockTx thinBlockTx(header.GetHash(), setHashesToRequest);
-        pfrom->PushMessage(NetMsgType::GET_XBLOCKTX, thinBlockTx);
+        pfrom->BobtailWaitingForTxns = setHashesToRequest.size();
+        CXRequestBobtailTx BobtailTx(header.GetHash(), setHashesToRequest);
+        pfrom->PushMessage(NetMsgType::GET_XBLOCKTX, BobtailTx);
 
         // Update run-time statistics of thin block bandwidth savings
-        thindata.UpdateInBoundReRequestedTx(pfrom->thinBlockWaitingForTxns);
+        thindata.UpdateInBoundReRequestedTx(pfrom->BobtailWaitingForTxns);
         return true;
     }
 
-    // If there are still any missing transactions then we must clear out the thinblock data
+    // If there are still any missing transactions then we must clear out the Bobtail data
     // and re-request a full block (This should never happen because we just checked the various pools).
     if (missingCount > 0)
     {
-        // Since we can't process this thinblock then clear out the data from memory
-        thindata.ClearThinBlockData(pfrom, header.GetHash());
+        // Since we can't process this Bobtail then clear out the data from memory
+        thindata.ClearBobtailData(pfrom, header.GetHash());
 
         std::vector<CInv> vGetData;
         vGetData.push_back(CInv(MSG_BLOCK, header.GetHash()));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
-        return error("Still missing transactions for xthinblock: re-requesting a full block");
+        return error("Still missing transactions for xBobtail: re-requesting a full block");
     }
 
     // We now have all the transactions now that are in this block
-    pfrom->thinBlockWaitingForTxns = -1;
-    int blockSize = ::GetSerializeSize(pfrom->thinBlock, SER_NETWORK, CBlock::CURRENT_VERSION);
+    pfrom->BobtailWaitingForTxns = -1;
+    int blockSize = ::GetSerializeSize(pfrom->Bobtail, SER_NETWORK, CBlock::CURRENT_VERSION);
     LogPrint("thin",
-        "Reassembled xthinblock for %s (%d bytes). Message was %d bytes, compression ratio %3.2f, peer=%s\n",
-        pfrom->thinBlock.GetHash().ToString(), blockSize, pfrom->nSizeThinBlock,
-        ((float)blockSize) / ((float)pfrom->nSizeThinBlock), pfrom->GetLogName());
+        "Reassembled xBobtail for %s (%d bytes). Message was %d bytes, compression ratio %3.2f, peer=%s\n",
+        pfrom->Bobtail.GetHash().ToString(), blockSize, pfrom->nSizeBobtail,
+        ((float)blockSize) / ((float)pfrom->nSizeBobtail), pfrom->GetLogName());
 
     // Update run-time statistics of thin block bandwidth savings
-    thindata.UpdateInBound(pfrom->nSizeThinBlock, blockSize);
+    thindata.UpdateInBound(pfrom->nSizeBobtail, blockSize);
     LogPrint("thin", "thin block stats: %s\n", thindata.ToString().c_str());
 
     // Process the full block
-    PV->HandleBlockMessage(pfrom, strCommand, pfrom->thinBlock, GetInv());
+    PV->HandleBlockMessage(pfrom, strCommand, pfrom->Bobtail, GetInv());
 
     return true;
 }
@@ -856,10 +856,10 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
     // We must have all the full tx hashes by this point.  We first check for any repeating
     // sequences in transaction id's.  This is a possible attack vector and has been used in the past.
     {
-        std::set<uint256> setHashes(pfrom->thinBlockHashes.begin(), pfrom->thinBlockHashes.end());
-        if (setHashes.size() != pfrom->thinBlockHashes.size())
+        std::set<uint256> setHashes(pfrom->BobtailHashes.begin(), pfrom->BobtailHashes.end());
+        if (setHashes.size() != pfrom->BobtailHashes.size())
         {
-            thindata.ClearThinBlockData(pfrom, pfrom->thinBlock.GetBlockHeader().GetHash());
+            thindata.ClearBobtailData(pfrom, pfrom->Bobtail.GetBlockHeader().GetHash());
 
             dosMan.Misbehaving(pfrom, 10);
             return error("Repeating Transaction Id sequence, peer=%s", pfrom->GetLogName());
@@ -867,8 +867,8 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
     }
 
     // Look for each transaction in our various pools and buffers.
-    // With xThinBlocks the vTxHashes contains only the first 8 bytes of the tx hash.
-    BOOST_FOREACH (const uint256 hash, pfrom->thinBlockHashes)
+    // With xBobtails the vTxHashes contains only the first 8 bytes of the tx hash.
+    BOOST_FOREACH (const uint256 hash, pfrom->BobtailHashes)
     {
         // Replace the truncated hash with the full hash value if it exists
         CTransaction tx;
@@ -900,39 +900,39 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
         uint64_t nCurrentMax = 0;
         if (maxAllowedSize >= nTxSize)
             nCurrentMax = maxAllowedSize - nTxSize;
-        if (thindata.AddThinBlockBytes(nTxSize, pfrom) > nCurrentMax)
+        if (thindata.AddBobtailBytes(nTxSize, pfrom) > nCurrentMax)
         {
             LEAVE_CRITICAL_SECTION(cs_xval); // maintain locking order with vNodes
-            if (ClearLargestThinBlockAndDisconnect(pfrom))
+            if (ClearLargestBobtailAndDisconnect(pfrom))
             {
                 ENTER_CRITICAL_SECTION(cs_xval);
                 return error(
                     "Reconstructed block %s (size:%llu) has caused max memory limit %llu bytes to be exceeded, peer=%s",
-                    pfrom->thinBlock.GetHash().ToString(), pfrom->nLocalThinBlockBytes, maxAllowedSize,
+                    pfrom->Bobtail.GetHash().ToString(), pfrom->nLocalBobtailBytes, maxAllowedSize,
                     pfrom->GetLogName());
             }
             ENTER_CRITICAL_SECTION(cs_xval);
         }
-        if (pfrom->nLocalThinBlockBytes > nCurrentMax)
+        if (pfrom->nLocalBobtailBytes > nCurrentMax)
         {
-            thindata.ClearThinBlockData(pfrom, pfrom->thinBlock.GetBlockHeader().GetHash());
+            thindata.ClearBobtailData(pfrom, pfrom->Bobtail.GetBlockHeader().GetHash());
             pfrom->fDisconnect = true;
             return error(
                 "Reconstructed block %s (size:%llu) has caused max memory limit %llu bytes to be exceeded, peer=%s",
-                pfrom->thinBlock.GetHash().ToString(), pfrom->nLocalThinBlockBytes, maxAllowedSize,
+                pfrom->Bobtail.GetHash().ToString(), pfrom->nLocalBobtailBytes, maxAllowedSize,
                 pfrom->GetLogName());
         }
 
         // Add this transaction. If the tx is null we still add it as a placeholder to keep the correct ordering.
-        pfrom->thinBlock.vtx.push_back(tx);
+        pfrom->Bobtail.vtx.push_back(tx);
     }
     return true;
 }
 
 template <class T>
-void CThinBlockData::expireStats(std::map<int64_t, T> &statsMap)
+void CBobtailData::expireStats(std::map<int64_t, T> &statsMap)
 {
-    AssertLockHeld(cs_thinblockstats);
+    AssertLockHeld(cs_Bobtailstats);
     // Delete any entries that are more than 24 hours old
     int64_t nTimeCutoff = getTimeForStats() - 60 * 60 * 24 * 1000;
 
@@ -948,9 +948,9 @@ void CThinBlockData::expireStats(std::map<int64_t, T> &statsMap)
 }
 
 template <class T>
-void CThinBlockData::updateStats(std::map<int64_t, T> &statsMap, T value)
+void CBobtailData::updateStats(std::map<int64_t, T> &statsMap, T value)
 {
-    AssertLockHeld(cs_thinblockstats);
+    AssertLockHeld(cs_Bobtailstats);
     statsMap[getTimeForStats()] = value;
     expireStats(statsMap);
 }
@@ -958,9 +958,9 @@ void CThinBlockData::updateStats(std::map<int64_t, T> &statsMap, T value)
 /**
    Calculate average of values in map. Return 0 for no entries.
    Expires values before calculation. */
-double CThinBlockData::average(std::map<int64_t, uint64_t> &map)
+double CBobtailData::average(std::map<int64_t, uint64_t> &map)
 {
-    AssertLockHeld(cs_thinblockstats);
+    AssertLockHeld(cs_Bobtailstats);
 
     expireStats(map);
 
@@ -976,78 +976,78 @@ double CThinBlockData::average(std::map<int64_t, uint64_t> &map)
     return (double)accum / map.size();
 }
 
-void CThinBlockData::UpdateInBound(uint64_t nThinBlockSize, uint64_t nOriginalBlockSize)
+void CBobtailData::UpdateInBound(uint64_t nBobtailSize, uint64_t nOriginalBlockSize)
 {
-    LOCK(cs_thinblockstats);
-    // Update InBound thinblock tracking information
+    LOCK(cs_Bobtailstats);
+    // Update InBound Bobtail tracking information
     nOriginalSize += nOriginalBlockSize;
-    nThinSize += nThinBlockSize;
+    nThinSize += nBobtailSize;
     nBlocks += 1;
-    updateStats(mapThinBlocksInBound, pair<uint64_t, uint64_t>(nThinBlockSize, nOriginalBlockSize));
+    updateStats(mapBobtailsInBound, pair<uint64_t, uint64_t>(nBobtailSize, nOriginalBlockSize));
 }
 
-void CThinBlockData::UpdateOutBound(uint64_t nThinBlockSize, uint64_t nOriginalBlockSize)
+void CBobtailData::UpdateOutBound(uint64_t nBobtailSize, uint64_t nOriginalBlockSize)
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     nOriginalSize += nOriginalBlockSize;
-    nThinSize += nThinBlockSize;
+    nThinSize += nBobtailSize;
     nBlocks += 1;
-    updateStats(mapThinBlocksOutBound, pair<uint64_t, uint64_t>(nThinBlockSize, nOriginalBlockSize));
+    updateStats(mapBobtailsOutBound, pair<uint64_t, uint64_t>(nBobtailSize, nOriginalBlockSize));
 }
 
-void CThinBlockData::UpdateOutBoundBloomFilter(uint64_t nBloomFilterSize)
+void CBobtailData::UpdateOutBoundBloomFilter(uint64_t nBloomFilterSize)
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     nTotalBloomFilterBytes += nBloomFilterSize;
     updateStats(mapBloomFiltersOutBound, nBloomFilterSize);
 }
 
-void CThinBlockData::UpdateInBoundBloomFilter(uint64_t nBloomFilterSize)
+void CBobtailData::UpdateInBoundBloomFilter(uint64_t nBloomFilterSize)
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     nTotalBloomFilterBytes += nBloomFilterSize;
     updateStats(mapBloomFiltersInBound, nBloomFilterSize);
 }
 
-void CThinBlockData::UpdateResponseTime(double nResponseTime)
+void CBobtailData::UpdateResponseTime(double nResponseTime)
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
     // only update stats if IBD is complete
-    if (IsChainNearlySyncd() && IsThinBlocksEnabled())
+    if (IsChainNearlySyncd() && IsBobtailsEnabled())
     {
-        updateStats(mapThinBlockResponseTime, nResponseTime);
+        updateStats(mapBobtailResponseTime, nResponseTime);
     }
 }
 
-void CThinBlockData::UpdateValidationTime(double nValidationTime)
+void CBobtailData::UpdateValidationTime(double nValidationTime)
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
     // only update stats if IBD is complete
-    if (IsChainNearlySyncd() && IsThinBlocksEnabled())
+    if (IsChainNearlySyncd() && IsBobtailsEnabled())
     {
-        updateStats(mapThinBlockValidationTime, nValidationTime);
+        updateStats(mapBobtailValidationTime, nValidationTime);
     }
 }
 
-void CThinBlockData::UpdateInBoundReRequestedTx(int nReRequestedTx)
+void CBobtailData::UpdateInBoundReRequestedTx(int nReRequestedTx)
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
-    // Update InBound thinblock tracking information
-    updateStats(mapThinBlocksInBoundReRequestedTx, nReRequestedTx);
+    // Update InBound Bobtail tracking information
+    updateStats(mapBobtailsInBoundReRequestedTx, nReRequestedTx);
 }
 
-void CThinBlockData::UpdateMempoolLimiterBytesSaved(unsigned int nBytesSaved)
+void CBobtailData::UpdateMempoolLimiterBytesSaved(unsigned int nBytesSaved)
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     nMempoolLimiterBytesSaved += nBytesSaved;
 }
 
-string CThinBlockData::ToString()
+string CBobtailData::ToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     double size = double(nOriginalSize() - nThinSize() - nTotalBloomFilterBytes());
     ostringstream ss;
     ss << nBlocks() << " thin " << ((nBlocks() > 1) ? "blocks have" : "block has") << " saved " << formatInfoUnit(size)
@@ -1056,17 +1056,17 @@ string CThinBlockData::ToString()
 }
 
 // Calculate the xthin percentage compression over the last 24 hours
-string CThinBlockData::InBoundPercentToString()
+string CBobtailData::InBoundPercentToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
-    expireStats(mapThinBlocksInBound);
+    expireStats(mapBobtailsInBound);
 
     double nCompressionRate = 0;
     uint64_t nThinSizeTotal = 0;
     uint64_t nOriginalSizeTotal = 0;
-    for (map<int64_t, pair<uint64_t, uint64_t> >::iterator mi = mapThinBlocksInBound.begin();
-         mi != mapThinBlocksInBound.end(); ++mi)
+    for (map<int64_t, pair<uint64_t, uint64_t> >::iterator mi = mapBobtailsInBound.begin();
+         mi != mapBobtailsInBound.end(); ++mi)
     {
         nThinSizeTotal += (*mi).second.first;
         nOriginalSizeTotal += (*mi).second.second;
@@ -1085,23 +1085,23 @@ string CThinBlockData::InBoundPercentToString()
 
     ostringstream ss;
     ss << fixed << setprecision(1);
-    ss << "Compression for " << mapThinBlocksInBound.size() << " Inbound  thinblocks (last 24hrs): " << nCompressionRate
+    ss << "Compression for " << mapBobtailsInBound.size() << " Inbound  Bobtails (last 24hrs): " << nCompressionRate
        << "%";
     return ss.str();
 }
 
 // Calculate the xthin percentage compression over the last 24 hours
-string CThinBlockData::OutBoundPercentToString()
+string CBobtailData::OutBoundPercentToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
-    expireStats(mapThinBlocksOutBound);
+    expireStats(mapBobtailsOutBound);
 
     double nCompressionRate = 0;
     uint64_t nThinSizeTotal = 0;
     uint64_t nOriginalSizeTotal = 0;
-    for (map<int64_t, pair<uint64_t, uint64_t> >::iterator mi = mapThinBlocksOutBound.begin();
-         mi != mapThinBlocksOutBound.end(); ++mi)
+    for (map<int64_t, pair<uint64_t, uint64_t> >::iterator mi = mapBobtailsOutBound.begin();
+         mi != mapBobtailsOutBound.end(); ++mi)
     {
         nThinSizeTotal += (*mi).second.first;
         nOriginalSizeTotal += (*mi).second.second;
@@ -1118,15 +1118,15 @@ string CThinBlockData::OutBoundPercentToString()
 
     ostringstream ss;
     ss << fixed << setprecision(1);
-    ss << "Compression for " << mapThinBlocksOutBound.size()
-       << " Outbound thinblocks (last 24hrs): " << nCompressionRate << "%";
+    ss << "Compression for " << mapBobtailsOutBound.size()
+       << " Outbound Bobtails (last 24hrs): " << nCompressionRate << "%";
     return ss.str();
 }
 
 // Calculate the average inbound xthin bloom filter size
-string CThinBlockData::InBoundBloomFiltersToString()
+string CBobtailData::InBoundBloomFiltersToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     double avgBloomSize = average(mapBloomFiltersInBound);
     ostringstream ss;
     ss << "Inbound bloom filter size (last 24hrs) AVG: " << formatInfoUnit(avgBloomSize);
@@ -1134,18 +1134,18 @@ string CThinBlockData::InBoundBloomFiltersToString()
 }
 
 // Calculate the average inbound xthin bloom filter size
-string CThinBlockData::OutBoundBloomFiltersToString()
+string CBobtailData::OutBoundBloomFiltersToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     double avgBloomSize = average(mapBloomFiltersOutBound);
     ostringstream ss;
     ss << "Outbound bloom filter size (last 24hrs) AVG: " << formatInfoUnit(avgBloomSize);
     return ss.str();
 }
 // Calculate the xthin percentage compression over the last 24 hours
-string CThinBlockData::ResponseTimeToString()
+string CBobtailData::ResponseTimeToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
     vector<double> vResponseTime;
 
@@ -1153,7 +1153,7 @@ string CThinBlockData::ResponseTimeToString()
     double nPercentile = 0;
     double nTotalResponseTime = 0;
     double nTotalEntries = 0;
-    for (map<int64_t, double>::iterator mi = mapThinBlockResponseTime.begin(); mi != mapThinBlockResponseTime.end();
+    for (map<int64_t, double>::iterator mi = mapBobtailResponseTime.begin(); mi != mapBobtailResponseTime.end();
          ++mi)
     {
         nTotalEntries += 1;
@@ -1178,9 +1178,9 @@ string CThinBlockData::ResponseTimeToString()
 }
 
 // Calculate the xthin percentage compression over the last 24 hours
-string CThinBlockData::ValidationTimeToString()
+string CBobtailData::ValidationTimeToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
     vector<double> vValidationTime;
 
@@ -1188,7 +1188,7 @@ string CThinBlockData::ValidationTimeToString()
     double nPercentile = 0;
     double nTotalValidationTime = 0;
     double nTotalEntries = 0;
-    for (map<int64_t, double>::iterator mi = mapThinBlockValidationTime.begin(); mi != mapThinBlockValidationTime.end();
+    for (map<int64_t, double>::iterator mi = mapBobtailValidationTime.begin(); mi != mapBobtailValidationTime.end();
          ++mi)
     {
         nTotalEntries += 1;
@@ -1213,24 +1213,24 @@ string CThinBlockData::ValidationTimeToString()
 }
 
 // Calculate the xthin percentage compression over the last 24 hours
-string CThinBlockData::ReRequestedTxToString()
+string CBobtailData::ReRequestedTxToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
 
-    expireStats(mapThinBlocksInBoundReRequestedTx);
+    expireStats(mapBobtailsInBoundReRequestedTx);
 
     double nReRequestRate = 0;
     uint64_t nTotalReRequests = 0;
     uint64_t nTotalReRequestedTxs = 0;
-    for (map<int64_t, int>::iterator mi = mapThinBlocksInBoundReRequestedTx.begin();
-         mi != mapThinBlocksInBoundReRequestedTx.end(); ++mi)
+    for (map<int64_t, int>::iterator mi = mapBobtailsInBoundReRequestedTx.begin();
+         mi != mapBobtailsInBoundReRequestedTx.end(); ++mi)
     {
         nTotalReRequests += 1;
         nTotalReRequestedTxs += (*mi).second;
     }
 
-    if (mapThinBlocksInBound.size() > 0)
-        nReRequestRate = 100 * (double)nTotalReRequests / mapThinBlocksInBound.size();
+    if (mapBobtailsInBound.size() > 0)
+        nReRequestRate = 100 * (double)nTotalReRequests / mapBobtailsInBound.size();
 
     ostringstream ss;
     ss << fixed << setprecision(1);
@@ -1238,102 +1238,102 @@ string CThinBlockData::ReRequestedTxToString()
     return ss.str();
 }
 
-string CThinBlockData::MempoolLimiterBytesSavedToString()
+string CBobtailData::MempoolLimiterBytesSavedToString()
 {
-    LOCK(cs_thinblockstats);
+    LOCK(cs_Bobtailstats);
     double size = (double)nMempoolLimiterBytesSaved();
     ostringstream ss;
-    ss << "Thinblock mempool limiting has saved " << formatInfoUnit(size) << " of bandwidth";
+    ss << "Bobtail mempool limiting has saved " << formatInfoUnit(size) << " of bandwidth";
     return ss.str();
 }
 
-// Preferential Thinblock Timer:
-// The purpose of the timer is to ensure that we more often download an XTHINBLOCK rather than a full block.
+// Preferential Bobtail Timer:
+// The purpose of the timer is to ensure that we more often download an XBobtail rather than a full block.
 // The timer is started when we receive the first announcement indicating there is a new block to download.  If the
 // block inventory is from a non XTHIN node then we will continue to wait for block announcements until either we
 // get one from an XTHIN capable node or the timer is exceeded.  If the timer is exceeded before receiving an
 // announcement from an XTHIN node then we just download a full block instead of an xthin.
-bool CThinBlockData::CheckThinblockTimer(uint256 hash)
+bool CBobtailData::CheckBobtailTimer(uint256 hash)
 {
-    LOCK(cs_mapThinBlockTimer);
-    if (!mapThinBlockTimer.count(hash))
+    LOCK(cs_mapBobtailTimer);
+    if (!mapBobtailTimer.count(hash))
     {
-        mapThinBlockTimer[hash] = GetTimeMillis();
-        LogPrint("thin", "Starting Preferential Thinblock timer\n");
+        mapBobtailTimer[hash] = GetTimeMillis();
+        LogPrint("thin", "Starting Preferential Bobtail timer\n");
     }
     else
     {
         // Check that we have not exceeded the 10 second limit.
         // If we have then we want to return false so that we can
         // proceed to download a regular block instead.
-        uint64_t elapsed = GetTimeMillis() - mapThinBlockTimer[hash];
+        uint64_t elapsed = GetTimeMillis() - mapBobtailTimer[hash];
         if (elapsed > 10000)
         {
-            LogPrint("thin", "Preferential Thinblock timer exceeded - downloading regular block instead\n");
+            LogPrint("thin", "Preferential Bobtail timer exceeded - downloading regular block instead\n");
             return false;
         }
     }
     return true;
 }
 
-// The timer is cleared as soon as we request a block or thinblock.
-void CThinBlockData::ClearThinBlockTimer(uint256 hash)
+// The timer is cleared as soon as we request a block or Bobtail.
+void CBobtailData::ClearBobtailTimer(uint256 hash)
 {
-    LOCK(cs_mapThinBlockTimer);
-    if (mapThinBlockTimer.count(hash))
+    LOCK(cs_mapBobtailTimer);
+    if (mapBobtailTimer.count(hash))
     {
-        mapThinBlockTimer.erase(hash);
-        LogPrint("thin", "Clearing Preferential Thinblock timer\n");
+        mapBobtailTimer.erase(hash);
+        LogPrint("thin", "Clearing Preferential Bobtail timer\n");
     }
 }
 
-// After a thinblock is finished processing or if for some reason we have to pre-empt the rebuilding
-// of a thinblock then we clear out the thinblock data which can be substantial.
-void CThinBlockData::ClearThinBlockData(CNode *pnode)
+// After a Bobtail is finished processing or if for some reason we have to pre-empt the rebuilding
+// of a Bobtail then we clear out the Bobtail data which can be substantial.
+void CBobtailData::ClearBobtailData(CNode *pnode)
 {
     // Remove bytes from counter
-    thindata.DeleteThinBlockBytes(pnode->nLocalThinBlockBytes, pnode);
-    pnode->nLocalThinBlockBytes = 0;
+    thindata.DeleteBobtailBytes(pnode->nLocalBobtailBytes, pnode);
+    pnode->nLocalBobtailBytes = 0;
 
-    // Clear out thinblock data we no longer need
-    pnode->thinBlockWaitingForTxns = -1;
-    pnode->thinBlock.SetNull();
-    pnode->xThinBlockHashes.clear();
-    pnode->thinBlockHashes.clear();
+    // Clear out Bobtail data we no longer need
+    pnode->BobtailWaitingForTxns = -1;
+    pnode->Bobtail.SetNull();
+    pnode->xBobtailHashes.clear();
+    pnode->BobtailHashes.clear();
     pnode->mapMissingTx.clear();
 
-    LogPrint("thin", "Total in memory thinblockbytes size after clearing a thinblock is %ld bytes\n",
-        thindata.GetThinBlockBytes());
+    LogPrint("thin", "Total in memory Bobtailbytes size after clearing a Bobtail is %ld bytes\n",
+        thindata.GetBobtailBytes());
 }
 
-void CThinBlockData::ClearThinBlockData(CNode *pnode, uint256 hash)
+void CBobtailData::ClearBobtailData(CNode *pnode, uint256 hash)
 {
-    // We must make sure to clear the thinblock data first before clearing the thinblock in flight.
-    ClearThinBlockData(pnode);
-    ClearThinBlockInFlight(pnode, hash);
+    // We must make sure to clear the Bobtail data first before clearing the Bobtail in flight.
+    ClearBobtailData(pnode);
+    ClearBobtailInFlight(pnode, hash);
 }
-uint64_t CThinBlockData::AddThinBlockBytes(uint64_t bytes, CNode *pfrom)
+uint64_t CBobtailData::AddBobtailBytes(uint64_t bytes, CNode *pfrom)
 {
-    pfrom->nLocalThinBlockBytes += bytes;
-    uint64_t ret = nThinBlockBytes.fetch_add(bytes) + bytes;
+    pfrom->nLocalBobtailBytes += bytes;
+    uint64_t ret = nBobtailBytes.fetch_add(bytes) + bytes;
 
     return ret;
 }
 
-void CThinBlockData::DeleteThinBlockBytes(uint64_t bytes, CNode *pfrom)
+void CBobtailData::DeleteBobtailBytes(uint64_t bytes, CNode *pfrom)
 {
-    if (bytes <= pfrom->nLocalThinBlockBytes)
-        pfrom->nLocalThinBlockBytes -= bytes;
+    if (bytes <= pfrom->nLocalBobtailBytes)
+        pfrom->nLocalBobtailBytes -= bytes;
 
-    if (bytes <= nThinBlockBytes)
+    if (bytes <= nBobtailBytes)
     {
-        nThinBlockBytes.fetch_sub(bytes);
+        nBobtailBytes.fetch_sub(bytes);
     }
 }
 
-void CThinBlockData::ResetThinBlockBytes() { nThinBlockBytes.store(0); }
-uint64_t CThinBlockData::GetThinBlockBytes() { return nThinBlockBytes.load(); }
-bool HaveConnectThinblockNodes()
+void CBobtailData::ResetBobtailBytes() { nBobtailBytes.store(0); }
+uint64_t CBobtailData::GetBobtailBytes() { return nBobtailBytes.load(); }
+bool HaveConnectBobtailNodes()
 {
     // Strip the port from then list of all the current in and outbound ip addresses
     vector<string> vNodesIP;
@@ -1350,25 +1350,25 @@ bool HaveConnectThinblockNodes()
     }
 
     // Create a set used to check for cross connected nodes.
-    // A cross connected node is one where we have a connect-thinblock connection to
+    // A cross connected node is one where we have a connect-Bobtail connection to
     // but we also have another inbound connection which is also using
-    // connect-thinblock. In those cases we have created a dead-lock where no blocks
-    // can be downloaded unless we also have at least one additional connect-thinblock
+    // connect-Bobtail. In those cases we have created a dead-lock where no blocks
+    // can be downloaded unless we also have at least one additional connect-Bobtail
     // connection to a different node.
     set<string> nNotCrossConnected;
 
     int nConnectionsOpen = 0;
-    BOOST_FOREACH (const string &strAddrNode, mapMultiArgs["-connect-thinblock"])
+    BOOST_FOREACH (const string &strAddrNode, mapMultiArgs["-connect-Bobtail"])
     {
-        string strThinblockNode;
+        string strBobtailNode;
         int pos = strAddrNode.rfind(":");
         if (pos <= 0)
-            strThinblockNode = strAddrNode;
+            strBobtailNode = strAddrNode;
         else
-            strThinblockNode = strAddrNode.substr(0, pos);
+            strBobtailNode = strAddrNode.substr(0, pos);
         BOOST_FOREACH (string strAddr, vNodesIP)
         {
-            if (strAddr == strThinblockNode)
+            if (strAddr == strBobtailNode)
             {
                 nConnectionsOpen++;
                 if (!nNotCrossConnected.count(strAddr))
@@ -1382,55 +1382,55 @@ bool HaveConnectThinblockNodes()
         return true;
     else if (nConnectionsOpen > 0)
         LogPrint("thin",
-            "You have a cross connected thinblock node - we may download regular blocks until you resolve the issue\n");
+            "You have a cross connected Bobtail node - we may download regular blocks until you resolve the issue\n");
     return false; // Connections are either not open or they are cross connected.
 }
 
 
-bool HaveThinblockNodes()
+bool HaveBobtailNodes()
 {
     {
         LOCK(cs_vNodes);
         BOOST_FOREACH (CNode *pnode, vNodes)
-            if (pnode->ThinBlockCapable())
+            if (pnode->BobtailCapable())
                 return true;
     }
     return false;
 }
 
-bool IsThinBlocksEnabled() { return GetBoolArg("-use-thinblocks", true); }
-bool CanThinBlockBeDownloaded(CNode *pto)
+bool IsBobtailsEnabled() { return GetBoolArg("-use-Bobtails", true); }
+bool CanBobtailBeDownloaded(CNode *pto)
 {
-    if (pto->ThinBlockCapable() && !GetBoolArg("-connect-thinblock-force", false))
+    if (pto->BobtailCapable() && !GetBoolArg("-connect-Bobtail-force", false))
         return true;
-    else if (pto->ThinBlockCapable() && GetBoolArg("-connect-thinblock-force", false))
+    else if (pto->BobtailCapable() && GetBoolArg("-connect-Bobtail-force", false))
     {
-        // If connect-thinblock-force is true then we have to check that this node is in fact a connect-thinblock node.
+        // If connect-Bobtail-force is true then we have to check that this node is in fact a connect-Bobtail node.
 
-        // When -connect-thinblock-force is true we will only download thinblocks from a peer or peers that
-        // are using -connect-thinblock=<ip>.  This is an undocumented setting used for setting up performance testing
-        // of thinblocks, such as, going over the GFC and needing to have thinblocks always come from the same peer or
-        // group of peers.  Also, this is a one way street.  Thinblocks will flow ONLY from the remote peer to the peer
-        // that has invoked -connect-thinblock.
+        // When -connect-Bobtail-force is true we will only download Bobtails from a peer or peers that
+        // are using -connect-Bobtail=<ip>.  This is an undocumented setting used for setting up performance testing
+        // of Bobtails, such as, going over the GFC and needing to have Bobtails always come from the same peer or
+        // group of peers.  Also, this is a one way street.  Bobtails will flow ONLY from the remote peer to the peer
+        // that has invoked -connect-Bobtail.
 
-        // Check if this node is also a connect-thinblock node
-        BOOST_FOREACH (const string &strAddrNode, mapMultiArgs["-connect-thinblock"])
+        // Check if this node is also a connect-Bobtail node
+        BOOST_FOREACH (const string &strAddrNode, mapMultiArgs["-connect-Bobtail"])
             if (pto->addrName == strAddrNode)
                 return true;
     }
     return false;
 }
 
-void ConnectToThinBlockNodes()
+void ConnectToBobtailNodes()
 {
     // Connect to specific addresses
-    if (mapArgs.count("-connect-thinblock") && mapMultiArgs["-connect-thinblock"].size() > 0)
+    if (mapArgs.count("-connect-Bobtail") && mapMultiArgs["-connect-Bobtail"].size() > 0)
     {
-        BOOST_FOREACH (const string &strAddr, mapMultiArgs["-connect-thinblock"])
+        BOOST_FOREACH (const string &strAddr, mapMultiArgs["-connect-Bobtail"])
         {
             CAddress addr;
             // NOTE: Because the only nodes we are connecting to here are the ones the user put in their
-            //      bitcoin.conf/commandline args as "-connect-thinblock", we don't use the semaphore to limit outbound
+            //      bitcoin.conf/commandline args as "-connect-Bobtail", we don't use the semaphore to limit outbound
             //      connections
             OpenNetworkConnection(addr, false, NULL, strAddr.c_str());
             MilliSleep(500);
@@ -1438,17 +1438,17 @@ void ConnectToThinBlockNodes()
     }
 }
 
-void CheckNodeSupportForThinBlocks()
+void CheckNodeSupportForBobtails()
 {
-    if (IsThinBlocksEnabled())
+    if (IsBobtailsEnabled())
     {
-        // Check that a nodes pointed to with connect-thinblock actually supports thinblocks
-        BOOST_FOREACH (string &strAddr, mapMultiArgs["-connect-thinblock"])
+        // Check that a nodes pointed to with connect-Bobtail actually supports Bobtails
+        BOOST_FOREACH (string &strAddr, mapMultiArgs["-connect-Bobtail"])
         {
             CNodeRef node = FindNodeRef(strAddr);
-            if (node && !node->ThinBlockCapable())
+            if (node && !node->BobtailCapable())
             {
-                LogPrintf("ERROR: You are trying to use connect-thinblocks but to a node that does not support it "
+                LogPrintf("ERROR: You are trying to use connect-Bobtails but to a node that does not support it "
                           "- Protocol Version: %d peer=%s\n",
                     node->nVersion, node->GetLogName());
             }
@@ -1456,22 +1456,22 @@ void CheckNodeSupportForThinBlocks()
     }
 }
 
-bool ClearLargestThinBlockAndDisconnect(CNode *pfrom)
+bool ClearLargestBobtailAndDisconnect(CNode *pfrom)
 {
     CNode *pLargest = NULL;
     LOCK(cs_vNodes);
     BOOST_FOREACH (CNode *pnode, vNodes)
     {
-        if ((pLargest == NULL) || (pnode->nLocalThinBlockBytes > pLargest->nLocalThinBlockBytes))
+        if ((pLargest == NULL) || (pnode->nLocalBobtailBytes > pLargest->nLocalBobtailBytes))
             pLargest = pnode;
     }
     if (pLargest != NULL)
     {
-        thindata.ClearThinBlockData(pLargest, pLargest->thinBlock.GetBlockHeader().GetHash());
+        thindata.ClearBobtailData(pLargest, pLargest->Bobtail.GetBlockHeader().GetHash());
         pLargest->fDisconnect = true;
 
-        // If the our node is currently using up the most thinblock bytes then return true so that we
-        // can stop processing this thinblock and let the disconnection happen.
+        // If the our node is currently using up the most Bobtail bytes then return true so that we
+        // can stop processing this Bobtail and let the disconnection happen.
         if (pfrom == pLargest)
             return true;
     }
@@ -1479,91 +1479,91 @@ bool ClearLargestThinBlockAndDisconnect(CNode *pfrom)
     return false;
 }
 
-void ClearThinBlockInFlight(CNode *pfrom, uint256 hash)
+void ClearBobtailInFlight(CNode *pfrom, uint256 hash)
 {
-    LOCK(pfrom->cs_mapthinblocksinflight);
-    pfrom->mapThinBlocksInFlight.erase(hash);
+    LOCK(pfrom->cs_mapBobtailsinflight);
+    pfrom->mapBobtailsInFlight.erase(hash);
 }
 
-void AddThinBlockInFlight(CNode *pfrom, uint256 hash)
+void AddBobtailInFlight(CNode *pfrom, uint256 hash)
 {
-    LOCK(pfrom->cs_mapthinblocksinflight);
-    pfrom->mapThinBlocksInFlight.insert(
-        std::pair<uint256, CNode::CThinBlockInFlight>(hash, CNode::CThinBlockInFlight()));
+    LOCK(pfrom->cs_mapBobtailsinflight);
+    pfrom->mapBobtailsInFlight.insert(
+        std::pair<uint256, CNode::CBobtailInFlight>(hash, CNode::CBobtailInFlight()));
 }
 
-void SendXThinBlock(CBlock &block, CNode *pfrom, const CInv &inv)
+void SendXBobtail(CBlock &block, CNode *pfrom, const CInv &inv)
 {
-    if (inv.type == MSG_XTHINBLOCK)
+    if (inv.type == MSG_XBobtail)
     {
-        CXThinBlock xThinBlock(block, pfrom->pThinBlockFilter);
+        CXBobtail xBobtail(block, pfrom->pBobtailFilter);
         int nSizeBlock = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
-        if (xThinBlock.collision ==
-            true) // If there is a cheapHash collision in this block then send a normal thinblock
+        if (xBobtail.collision ==
+            true) // If there is a cheapHash collision in this block then send a normal Bobtail
         {
-            CThinBlock thinBlock(block, *pfrom->pThinBlockFilter);
-            int nSizeThinBlock = ::GetSerializeSize(xThinBlock, SER_NETWORK, PROTOCOL_VERSION);
-            if (nSizeThinBlock < nSizeBlock)
+            CBobtail Bobtail(block, *pfrom->pBobtailFilter);
+            int nSizeBobtail = ::GetSerializeSize(xBobtail, SER_NETWORK, PROTOCOL_VERSION);
+            if (nSizeBobtail < nSizeBlock)
             {
-                pfrom->PushMessage(NetMsgType::THINBLOCK, thinBlock);
-                thindata.UpdateOutBound(nSizeThinBlock, nSizeBlock);
-                LogPrint("thin", "TX HASH COLLISION: Sent thinblock - size: %d vs block size: %d => tx hashes: %d "
+                pfrom->PushMessage(NetMsgType::Bobtail, Bobtail);
+                thindata.UpdateOutBound(nSizeBobtail, nSizeBlock);
+                LogPrint("thin", "TX HASH COLLISION: Sent Bobtail - size: %d vs block size: %d => tx hashes: %d "
                                  "transactions: %d  peer: %s\n",
-                    nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(),
+                    nSizeBobtail, nSizeBlock, xBobtail.vTxHashes.size(), xBobtail.vMissingTx.size(),
                     pfrom->GetLogName());
             }
             else
             {
                 pfrom->PushMessage(NetMsgType::BLOCK, block);
-                LogPrint("thin", "Sent regular block instead - xthinblock size: %d vs block size: %d => tx hashes: %d "
+                LogPrint("thin", "Sent regular block instead - xBobtail size: %d vs block size: %d => tx hashes: %d "
                                  "transactions: %d  peer: %s\n",
-                    nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(),
+                    nSizeBobtail, nSizeBlock, xBobtail.vTxHashes.size(), xBobtail.vMissingTx.size(),
                     pfrom->GetLogName());
             }
         }
-        else // Send an xThinblock
+        else // Send an xBobtail
         {
-            // Only send a thinblock if smaller than a regular block
-            int nSizeThinBlock = ::GetSerializeSize(xThinBlock, SER_NETWORK, PROTOCOL_VERSION);
-            if (nSizeThinBlock < nSizeBlock)
+            // Only send a Bobtail if smaller than a regular block
+            int nSizeBobtail = ::GetSerializeSize(xBobtail, SER_NETWORK, PROTOCOL_VERSION);
+            if (nSizeBobtail < nSizeBlock)
             {
-                thindata.UpdateOutBound(nSizeThinBlock, nSizeBlock);
-                pfrom->PushMessage(NetMsgType::XTHINBLOCK, xThinBlock);
+                thindata.UpdateOutBound(nSizeBobtail, nSizeBlock);
+                pfrom->PushMessage(NetMsgType::XBobtail, xBobtail);
                 LogPrint("thin",
-                    "Sent xthinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d peer: %s\n",
-                    nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(),
+                    "Sent xBobtail - size: %d vs block size: %d => tx hashes: %d transactions: %d peer: %s\n",
+                    nSizeBobtail, nSizeBlock, xBobtail.vTxHashes.size(), xBobtail.vMissingTx.size(),
                     pfrom->GetLogName());
             }
             else
             {
                 pfrom->PushMessage(NetMsgType::BLOCK, block);
-                LogPrint("thin", "Sent regular block instead - xthinblock size: %d vs block size: %d => tx hashes: %d "
+                LogPrint("thin", "Sent regular block instead - xBobtail size: %d vs block size: %d => tx hashes: %d "
                                  "transactions: %d  peer: %s\n",
-                    nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(),
+                    nSizeBobtail, nSizeBlock, xBobtail.vTxHashes.size(), xBobtail.vMissingTx.size(),
                     pfrom->GetLogName());
             }
         }
     }
-    else if (inv.type == MSG_THINBLOCK)
+    else if (inv.type == MSG_Bobtail)
     {
-        CThinBlock thinBlock(block, *pfrom->pThinBlockFilter);
+        CBobtail Bobtail(block, *pfrom->pBobtailFilter);
         int nSizeBlock = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
-        int nSizeThinBlock = ::GetSerializeSize(thinBlock, SER_NETWORK, PROTOCOL_VERSION);
-        if (nSizeThinBlock < nSizeBlock)
-        { // Only send a thinblock if smaller than a regular block
-            thindata.UpdateOutBound(nSizeThinBlock, nSizeBlock);
-            pfrom->PushMessage(NetMsgType::THINBLOCK, thinBlock);
+        int nSizeBobtail = ::GetSerializeSize(Bobtail, SER_NETWORK, PROTOCOL_VERSION);
+        if (nSizeBobtail < nSizeBlock)
+        { // Only send a Bobtail if smaller than a regular block
+            thindata.UpdateOutBound(nSizeBobtail, nSizeBlock);
+            pfrom->PushMessage(NetMsgType::Bobtail, Bobtail);
             LogPrint("thin",
-                "Sent thinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d  peer: %s\n",
-                nSizeThinBlock, nSizeBlock, thinBlock.vTxHashes.size(), thinBlock.vMissingTx.size(),
+                "Sent Bobtail - size: %d vs block size: %d => tx hashes: %d transactions: %d  peer: %s\n",
+                nSizeBobtail, nSizeBlock, Bobtail.vTxHashes.size(), Bobtail.vMissingTx.size(),
                 pfrom->GetLogName());
         }
         else
         {
             pfrom->PushMessage(NetMsgType::BLOCK, block);
-            LogPrint("thin", "Sent regular block instead - thinblock size: %d vs block size: %d => tx hashes: %d "
+            LogPrint("thin", "Sent regular block instead - Bobtail size: %d vs block size: %d => tx hashes: %d "
                              "transactions: %d  peer: %s\n",
-                nSizeThinBlock, nSizeBlock, thinBlock.vTxHashes.size(), thinBlock.vMissingTx.size(),
+                nSizeBobtail, nSizeBlock, Bobtail.vTxHashes.size(), Bobtail.vMissingTx.size(),
                 pfrom->GetLogName());
         }
     }
@@ -1575,17 +1575,17 @@ void SendXThinBlock(CBlock &block, CNode *pfrom, const CInv &inv)
     pfrom->blocksSent += 1;
 }
 
-bool IsThinBlockValid(CNode *pfrom, const std::vector<CTransaction> &vMissingTx, const CBlockHeader &header)
+bool IsBobtailValid(CNode *pfrom, const std::vector<CTransaction> &vMissingTx, const CBlockHeader &header)
 {
     // Check that that there is at least one txn in the xthin and that the first txn is the coinbase
     if (vMissingTx.empty())
     {
-        return error("No Transactions found in thinblock or xthinblock %s from peer %s", header.GetHash().ToString(),
+        return error("No Transactions found in Bobtail or xBobtail %s from peer %s", header.GetHash().ToString(),
             pfrom->GetLogName());
     }
     if (!vMissingTx[0].IsCoinBase())
     {
-        return error("First txn is not coinbase for thinblock or xthinblock %s from peer %s",
+        return error("First txn is not coinbase for Bobtail or xBobtail %s from peer %s",
             header.GetHash().ToString(), pfrom->GetLogName());
     }
 
@@ -1593,12 +1593,12 @@ bool IsThinBlockValid(CNode *pfrom, const std::vector<CTransaction> &vMissingTx,
     CValidationState state;
     if (!CheckBlockHeader(header, state, true))
     {
-        return error("Received invalid header for thinblock or xthinblock %s from peer %s", header.GetHash().ToString(),
+        return error("Received invalid header for Bobtail or xBobtail %s from peer %s", header.GetHash().ToString(),
             pfrom->GetLogName());
     }
     if (state.Invalid())
     {
-        return error("Received invalid header for thinblock or xthinblock %s from peer %s", header.GetHash().ToString(),
+        return error("Received invalid header for Bobtail or xBobtail %s from peer %s", header.GetHash().ToString(),
             pfrom->GetLogName());
     }
 
